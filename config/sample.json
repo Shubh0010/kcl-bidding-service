@@ -1,0 +1,9 @@
+{
+  "wallet_db" : {
+    "connectionLimit": 20,
+    "host": "",
+    "user": "",
+    "password": "",
+    "database": ""
+  }
+}
