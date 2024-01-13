@@ -1,5 +1,5 @@
-const { query } = require ("../database/mysql");
-const { RESPONSE_STATUS, MESSAGES, POTS_AVAILABLE, MAX_POT_PLAYERS_COUNT } = require ("../utils/constant");
+const { query } = require("../database/mysql");
+const { RESPONSE_STATUS, MESSAGES, POTS_AVAILABLE, MAX_POT_PLAYERS_COUNT } = require("../utils/constant");
 const { PARSE_JSON } = require("../utils/misc");
 
 const { connectToRedis } = require('../database/redisConnection');
@@ -16,11 +16,11 @@ const getAllPlayersFromDB = async ({ player_id }) => {
 
     const whereParams = [];
 
-    let sqlQuery = ' SELECT * FROM tb_players WHERE status IN (0,1) ';
+    let sqlQuery = ' SELECT * FROM tb_players WHERE status = 0 ';
 
     if (player_id) {
 
-      sqlQuery += ' AND id = ? ';
+      sqlQuery = ' SELECT * FROM tb_players WHERE id = ? ';
       whereParams.push(player_id);
     }
 
@@ -46,7 +46,7 @@ const getAllPlayersFromDB = async ({ player_id }) => {
  * Get All Teams
  */
 
-const getAllTeamsFromDB = async ({team_id}) => {
+const getAllTeamsFromDB = async ({ team_id }) => {
 
   try {
 
@@ -84,13 +84,24 @@ const getAllTeamsFromDB = async ({team_id}) => {
 
 const getRedisData = async () => {
 
+  const client = await redisClient.connect();
+
+  let data;
+
   try {
 
-    const client = await redisClient.connect();
+    data = await client.get('session_data');
 
-    const data = await client.get('session_data');
+    if (!data) {
 
-    await client.quit();
+      const playersData = await getAllPlayersFromDB({});
+
+      let [player] = playersData?.data;
+
+      await initializeRedisData({ player_id: player.id, client_:client });
+
+      data = await client.get('session_data');
+    }
 
     return {
       status: RESPONSE_STATUS.SUCCESS,
@@ -100,11 +111,14 @@ const getRedisData = async () => {
   } catch (error) {
 
     console.error(MESSAGES.ERROR_CONSOLE_LOG_SERVICE + 'getRedisdata');
-    console.error(error.message);
+    console.error(error);
 
     return {
       status: RESPONSE_STATUS.FAILURE,
     }
+  } finally {
+
+    await client.quit();
   }
 };
 
@@ -114,11 +128,11 @@ const getRedisData = async () => {
 
 const updateRedisData = async ({ team_id, bid_amount }) => {
 
+  const client = await redisClient.connect();
+
   try {
 
     // check if team can bid on the player
-
-    const client = await redisClient.connect();
 
     const json = await client.get('session_data');
 
@@ -147,12 +161,13 @@ const updateRedisData = async ({ team_id, bid_amount }) => {
 
     playerObj.current_team = team_id;
 
+    team.current_bid = bid_amount;
+
     await client.set('session_data', JSON.stringify({
       teamObj,
-      playerObj
+      playerObj,
+      bid_amount
     }));
-
-    await client.quit();
 
     return {
       status: RESPONSE_STATUS.SUCCESS
@@ -164,6 +179,9 @@ const updateRedisData = async ({ team_id, bid_amount }) => {
     return {
       status: RESPONSE_STATUS.FAILURE,
     }
+  } finally {
+
+    await client.quit();
   }
 };
 
@@ -177,13 +195,13 @@ const updatePlayerData = async ({ player_id, team_id, bought_at, status }) => {
 
     if (!player_id) throw new Error('Provide valid player ID.');
 
-    if (!team_id || status != -1) throw new Error('Provide valid team ID or mark player as unsold.');
+    if (!team_id && status != -1) throw new Error('Provide valid team ID or mark player as unsold.');
 
     const updateObj = {};
 
-    bought_at ? updateObj.bought_at : null;
-    team_id ? updateObj.team_id : null;
-    status ? updateObj.status : null;
+    bought_at ? updateObj.bought_at = bought_at : null;
+    team_id ? updateObj.team_id = team_id : null;
+    status ? updateObj.status = status: null;
 
     await query(`UPDATE tb_players SET ? WHERE id = ?`, [updateObj, player_id]);
 
@@ -208,37 +226,37 @@ const updateTeamData = async ({ team_id, player_id, bought_at }) => {
 
     if (!team_id) throw new Error('Provide valid team ID.');
 
-    let 
+    let
       pot_a_players = null,
       pot_b_players = null;
 
     const [teamData, playerData] = await Promise.all([
-      getAllTeamsFromDB({team_id}),
-      getAllPlayersFromDB({player_id})
+      getAllTeamsFromDB({ team_id }),
+      getAllPlayersFromDB({ player_id })
     ]);
 
     const [team] = teamData.data;
 
-    const [player] = playerData.player;
+    const [player] = playerData.data;
 
     const remaining_budget = team.remaining_budget - bought_at;
 
     const players_bought = team.players_bought + 1;
 
-    if(player.pot == POTS_AVAILABLE.POT_A) {
+    if (player.pot == POTS_AVAILABLE.POT_A) {
       pot_a_players = team.pot_a_players + 1;
     }
 
-    if(player.pot == POTS_AVAILABLE.POT_B) {
+    if (player.pot == POTS_AVAILABLE.POT_B) {
       pot_b_players = team.pot_b_players + 1;
     }
 
     const updateObj = {};
 
-    remaining_budget || remaining_budget == 0 ? updateObj.remaining_budget : null;
-    players_bought ? updateObj.players_bought : null;
-    pot_a_players ? updateObj.pot_a_players : null;
-    pot_b_players ? updateObj.pot_b_players : null;
+    (remaining_budget || remaining_budget == 0) ? updateObj.remaining_budget = remaining_budget : null;
+    players_bought ? updateObj.players_bought = players_bought : null;
+    pot_a_players ? updateObj.pot_a_players = pot_a_players : null;
+    pot_b_players ? updateObj.pot_b_players = pot_b_players : null;
 
     await query(`UPDATE tb_teams SET ? WHERE id = ?`, [updateObj, team_id]);
 
@@ -283,19 +301,26 @@ const clearRedisData = async () => {
   }
 };
 
-const initializeRedisData = async ({ player_id }) => {
+const initializeRedisData = async ({ player_id, client_ }) => {
+
+  let client = client_;
+
+  if (!client_) {
+
+    client = await redisClient.connect();
+  }
 
   try {
 
     let teamObj = {};
 
-    const {data: allTeamdata} = await getAllTeamsFromDB({ team_id: null });
+    const { data: allTeamdata } = await getAllTeamsFromDB({ team_id: null });
 
     allTeamdata.map((team) => {
 
       const players_need_to_be_bought = 5 - (team.players_bought + 1);
 
-      const max_bid = team.remaining_budget - ( players_need_to_be_bought * 5);
+      const max_bid = team.remaining_budget - (players_need_to_be_bought * 5);
 
       teamObj[team.id] = {
         max_bid: max_bid,
@@ -317,8 +342,6 @@ const initializeRedisData = async ({ player_id }) => {
       current_team: null
     };
 
-    const client = await redisClient.connect();
-
     const data = await client.set('session_data', JSON.stringify({
       teamObj,
       playerObj
@@ -334,6 +357,13 @@ const initializeRedisData = async ({ player_id }) => {
     console.error(error.message);
     return {
       status: RESPONSE_STATUS.FAILURE,
+    }
+  }
+
+  finally {
+
+    if(!client_) {
+      await client.quit();
     }
   }
 };

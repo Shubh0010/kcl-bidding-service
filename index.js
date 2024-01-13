@@ -11,6 +11,7 @@ connection = undefined;
 // Middleware
 app.use(bodyParser.json());
 app.use(cors());
+app.options('*', cors());
 
 // Routes
 app.get('/players', getAllPlayers);

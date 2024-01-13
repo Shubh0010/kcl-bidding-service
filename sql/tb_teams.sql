@@ -1,15 +1,15 @@
-CREATE TABLE `kcl_bid`.`tb_teams` (
-  `id` INT NOT NULL AUTO_INCREMENT,
-  `name` VARCHAR(20) NOT NULL,
-  `capitan_name` VARCHAR(20) NOT NULL,
-  `remaining_budget` INT NOT NULL DEFAULT '100',
-  `players_bought` TINYINT NOT NULL DEFAULT '0',
-  `pot_a_players` TINYINT NOT NULL DEFAULT '0',
-  `pot_b_players` TINYINT NOT NULL DEFAULT '0',
-  `created` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated` TIMESTAMP on update CURRENT_TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+CREATE TABLE `tb_teams` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `name` varchar(20) NOT NULL,
+  `capitan_name` varchar(20) NOT NULL,
+  `remaining_budget` int NOT NULL DEFAULT '100',
+  `players_bought` tinyint NOT NULL DEFAULT '0',
+  `pot_a_players` tinyint NOT NULL DEFAULT '0',
+  `pot_b_players` tinyint NOT NULL DEFAULT '0',
+  `created` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`)
-) ENGINE = InnoDB;
+);
 
 INSERT INTO
   `tb_teams` (

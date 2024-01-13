@@ -125,7 +125,7 @@ const completeBid = async (req, res) => {
       await initializeRedisData({ player_id: next_player_id });
     }
 
-    sendSuccessResponse(res, bidData);
+    sendSuccessResponse(res);
 
   } catch (error) {
 
