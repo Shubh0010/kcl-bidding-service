@@ -1,0 +1,39 @@
+version: '3.8'
+
+services:
+  dev-mysql:
+    image: mysql:latest
+    container_name: dev-mysql
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: pass123
+
+  dev-phpmyadmin:
+    image: phpmyadmin/phpmyadmin
+    container_name: dev-phpmyadmin
+    ports:
+      - "7098:80"
+    environment:
+      PMA_HOST: dev-mysql
+    depends_on:
+      - dev-mysql
+
+  dev-redis:
+    image: redis:latest
+    container_name: dev-redis
+    ports:
+      - "6379:6379"
+
+  kcl:
+    # build: .
+    image: kcl-bidding-service  # Replace with your backend tag
+    container_name: kcl
+    environment:
+      MYSQL_HOST: "dev-mysql"
+      REDIS_HOST: "dev-redis"
+    ports:
+      - "3000:3000"
+    depends_on:
+      - dev-mysql
+      - dev-redis
